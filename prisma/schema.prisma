@@ -1,0 +1,398 @@
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+// ==========================================
+// 1. TENANT & MULTITENANCY
+// ==========================================
+model Tenant {
+  id              String   @id @default(uuid())
+  slug            String   @unique
+  name            String
+  brandColor      String   @default("#10b981")
+  logoUrl         String?
+  headline        String   @default("Unite a nuestra comunidad oficial")
+  description     String   @default("Tus redes pueden desaparecer, nuestra comunidad permanece.")
+  plan            String   @default("FREE") // FREE, PRO, ENTERPRISE, ADNQN_WEB
+  status          String   @default("ACTIVE") // ACTIVE, SUSPENDED, ARCHIVED
+  
+  // Reported Social Metrics for Digital Independence Index (IID)
+  reportedFollowersInstagram Int @default(0)
+  reportedFollowersFacebook  Int @default(0)
+  reportedFollowersTikTok    Int @default(0)
+  reportedFollowersYouTube   Int @default(0)
+  reportedFollowersLinkedIn  Int @default(0)
+  reportedFollowersX         Int @default(0)
+  reportedFollowersUpdatedAt DateTime?
+
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  memberships     Membership[]
+  contacts        Contact[]
+  forms           Form[]
+  captureCampaigns CaptureCampaign[]
+  rescueIncidents RescueIncident[]
+  rescueCampaigns RescueCampaign[]
+  exportJobs      ExportJob[]
+  backupRuns      BackupRun[]
+  auditLogs       AuditLog[]
+  socialConnections SocialConnection[]
+
+  @@index([slug])
+  @@index([plan])
+}
+
+// ==========================================
+// 2. USERS, ROLES & MEMBERSHIPS
+// ==========================================
+model User {
+  id           String   @id @default(uuid())
+  email        String   @unique
+  passwordHash String
+  name         String
+  isSuperAdmin Boolean  @default(false) // ADNQN Platform administrator
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  memberships  Membership[]
+  auditLogs    AuditLog[]
+
+  @@index([email])
+}
+
+model Membership {
+  id        String   @id @default(uuid())
+  tenantId  String
+  userId    String
+  role      String   @default("ADMIN") // OWNER, ADMIN, OPERATOR, READER
+  createdAt DateTime @default(now())
+
+  tenant    Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, userId])
+  @@index([tenantId])
+  @@index([userId])
+}
+
+// ==========================================
+// 3. CONTACTS, CHANNELS & CONSENT
+// ==========================================
+model Contact {
+  id          String   @id @default(uuid())
+  tenantId    String
+  name        String?
+  notes       String?
+  status      String   @default("PENDING") // PENDING, ACTIVE, SUPPRESSED
+  source      String   @default("WEB_FORM") // WEB_FORM, WIDGET, QR_CODE, MANUAL_IMPORT
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  tenant      Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  channels    ContactChannel[]
+  consents    ConsentEvent[]
+  preferences Preference[]
+
+  @@index([tenantId])
+  @@index([tenantId, status])
+  @@index([createdAt])
+}
+
+model ContactChannel {
+  id              String    @id @default(uuid())
+  contactId       String
+  tenantId        String
+  type            String    // EMAIL, PHONE, WHATSAPP
+  normalizedValue String    // e.g. clean email or e164 phone
+  isVerified      Boolean   @default(false)
+  verifiedAt      DateTime?
+  optedOutAt      DateTime? // Date of unsubscribe
+  createdAt       DateTime  @default(now())
+
+  contact         Contact   @relation(fields: [contactId], references: [id], onDelete: Cascade)
+  tokens          VerificationToken[]
+  rescueMessages  RescueMessage[]
+
+  @@unique([tenantId, type, normalizedValue])
+  @@index([contactId])
+  @@index([tenantId, type, isVerified])
+}
+
+model ConsentEvent {
+  id             String   @id @default(uuid())
+  contactId      String
+  tenantId       String
+  channelType    String   // EMAIL, WHATSAPP, SMS
+  purpose        String   // CONTINUITY_RESCUE, COMMUNITY_NEWS, PROMOTIONAL
+  policyVersion  String   @default("v1.0")
+  ipHash         String?
+  userAgent      String?
+  sourceUrl      String?
+  utmSource      String?
+  utmMedium      String?
+  utmCampaign    String?
+  granted        Boolean  @default(true)
+  timestamp      DateTime @default(now())
+
+  contact        Contact  @relation(fields: [contactId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId])
+  @@index([contactId])
+  @@index([timestamp])
+}
+
+model Preference {
+  id              String   @id @default(uuid())
+  contactId       String
+  tenantId        String
+  allowRescue     Boolean  @default(true)
+  allowNewsletter Boolean  @default(true)
+  updatedAt       DateTime @updatedAt
+
+  contact         Contact  @relation(fields: [contactId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, contactId])
+}
+
+model VerificationToken {
+  id               String         @id @default(uuid())
+  contactChannelId String
+  tokenHash        String         @unique
+  expiresAt        DateTime
+  usedAt           DateTime?
+  createdAt        DateTime       @default(now())
+
+  channel          ContactChannel @relation(fields: [contactChannelId], references: [id], onDelete: Cascade)
+
+  @@index([tokenHash])
+  @@index([contactChannelId])
+}
+
+// ==========================================
+// 4. CAPTURE: FORMS, CAMPAIGNS, WIDGETS
+// ==========================================
+model Form {
+  id               String   @id @default(uuid())
+  tenantId         String
+  slug             String   @default("default")
+  title            String   @default("Unite a nuestra comunidad")
+  description      String   @default("Recibí avisos y novedades directas de nuestro negocio.")
+  askName          Boolean  @default(true)
+  requireName      Boolean  @default(false)
+  submitButtonText String   @default("Quiero registrarme")
+  successMessage   String   @default("¡Gracias por registrarte! Te enviamos un correo para confirmar tu suscripción.")
+  isActive         Boolean  @default(true)
+  allowedOrigins   String   @default("*") // For widget embedding security
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  tenant           Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, slug])
+  @@index([tenantId])
+}
+
+model CaptureCampaign {
+  id          String   @id @default(uuid())
+  tenantId    String
+  name        String
+  slug        String
+  utmSource   String   @default("instagram")
+  utmMedium   String   @default("bio")
+  utmCampaign String   @default("comunidad")
+  clicksCount Int      @default(0)
+  createdAt   DateTime @default(now())
+
+  tenant      Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, slug])
+  @@index([tenantId])
+}
+
+// ==========================================
+// 5. RESCUE: INCIDENTS, RESCUE CAMPAIGNS
+// ==========================================
+model RescueIncident {
+  id               String   @id @default(uuid())
+  tenantId         String
+  platform         String   // INSTAGRAM, FACEBOOK, TIKTOK, YOUTUBE, LINKEDIN, X
+  affectedHandle   String
+  incidentType     String   // ACCOUNT_SUSPENDED, HACKED, CLOSED, MIGRATION
+  newOfficialUrl   String
+  notes            String?
+  reportedAt       DateTime @default(now())
+  resolvedAt       DateTime?
+
+  tenant           Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  campaigns        RescueCampaign[]
+
+  @@index([tenantId])
+  @@index([platform])
+}
+
+model RescueCampaign {
+  id             String   @id @default(uuid())
+  tenantId       String
+  incidentId     String
+  subject        String
+  messageBody    String
+  newOfficialUrl String
+  status         String   @default("DRAFT") // DRAFT, PREVIEW_TEST, IN_PROGRESS, COMPLETED, FAILED
+  idempotencyKey String   @unique
+  eligibleCount  Int      @default(0)
+  sentCount      Int      @default(0)
+  failedCount    Int      @default(0)
+  createdAt      DateTime @default(now())
+  executedAt     DateTime?
+
+  tenant         Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  incident       RescueIncident @relation(fields: [incidentId], references: [id], onDelete: Cascade)
+  messages       RescueMessage[]
+
+  @@index([tenantId])
+  @@index([idempotencyKey])
+}
+
+model RescueMessage {
+  id               String   @id @default(uuid())
+  campaignId       String
+  contactChannelId String
+  recipientEmail   String
+  status           String   @default("PENDING") // PENDING, SENT, FAILED, EXCLUDED_UNSUBSCRIBED
+  errorMessage     String?
+  idempotencyKey   String   @unique
+  sentAt           DateTime?
+
+  campaign         RescueCampaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  channel          ContactChannel @relation(fields: [contactChannelId], references: [id], onDelete: Cascade)
+
+  @@index([campaignId])
+  @@index([idempotencyKey])
+}
+
+// ==========================================
+// 6. SOCIAL CONNECTIONS & METRICS
+// ==========================================
+model SocialConnection {
+  id          String   @id @default(uuid())
+  tenantId    String
+  platform    String   // INSTAGRAM, FACEBOOK, TIKTOK, YOUTUBE
+  status      String   @default("COMING_SOON") // COMING_SOON, DISCONNECTED, CONNECTED, PENDING_REVIEW
+  accountName String?
+  profileUrl  String?
+  lastSyncAt  DateTime?
+  createdAt   DateTime @default(now())
+
+  tenant      Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, platform])
+  @@index([tenantId])
+}
+
+// ==========================================
+// 7. EXPORT, BACKUP & AUDIT
+// ==========================================
+model ExportJob {
+  id          String   @id @default(uuid())
+  tenantId    String
+  format      String   @default("CSV") // CSV, JSON
+  status      String   @default("COMPLETED")
+  recordCount Int      @default(0)
+  createdAt   DateTime @default(now())
+
+  tenant      Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId])
+}
+
+model BackupRun {
+  id          String   @id @default(uuid())
+  tenantId    String
+  type        String   @default("FULL_TENANT_SNAPSHOT")
+  status      String   @default("SUCCESS")
+  checksum    String
+  dataJson    String   // Encrypted / serialized snapshot
+  createdAt   DateTime @default(now())
+
+  tenant      Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId])
+}
+
+model AuditLog {
+  id         String   @id @default(uuid())
+  tenantId   String?
+  userId     String?
+  action     String   // LOGIN, CONTACT_CREATE, CAMPAIGN_SEND, EXPORT_CSV, BACKUP_RESTORE
+  resource   String
+  details    String?
+  ipAddress  String?
+  createdAt  DateTime @default(now())
+
+  tenant     Tenant?  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  user       User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([tenantId])
+  @@index([createdAt])
+}
+
+// ==========================================
+// 8. CUENTAS FRANKENSTEIN (SERVICIO FORENSE VIP - SOLO SUPERADMIN)
+// ==========================================
+model FrankensteinCase {
+  id              String   @id @default(uuid())
+  tenantId        String?
+  clientName      String
+  clientEmail     String
+  clientPhone     String?
+  lostPlatform    String   @default("INSTAGRAM") // INSTAGRAM, TIKTOK, FACEBOOK, X_TWITTER, YOUTUBE
+  lostAccountUrl  String
+  newAccountUrl   String
+  status          String   @default("PENDING_REVIEW") // PENDING_REVIEW, SCRAPING, READY_FOR_DRIP, IN_PROGRESS, COMPLETED, PAUSED
+  tier            String   @default("FRANKEN_PRO") // FRANKEN_LOCAL, FRANKEN_PRO, FRANKEN_VIP
+  dailyRateLimit  Int      @default(50)
+  scrapeSource    String   @default("WEB_SCRAPE") // WEB_SCRAPE, ARCHIVE_CACHE, DATA_EXPORT
+  notes           String?
+  priceCharged    Float?   @default(420.0)
+  
+  // Métricas acumuladas
+  totalScraped    Int      @default(0)
+  totalNotified   Int      @default(0)
+  totalConverted  Int      @default(0)
+  
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  targets         FrankensteinTarget[]
+
+  @@index([status])
+  @@index([clientEmail])
+}
+
+model FrankensteinTarget {
+  id                  String   @id @default(uuid())
+  caseId              String
+  handle              String
+  displayName         String?
+  email               String?
+  phone               String?
+  bio                 String?
+  status              String   @default("PENDING") // PENDING, SENT, CONVERTED, FAILED, SKIPPED
+  notificationChannel String   @default("SATELLITE_DM") // SATELLITE_DM, DIRECT_EMAIL, SMS
+  sentAt              DateTime?
+  convertedAt         DateTime?
+  responseNote        String?
+  createdAt           DateTime @default(now())
+
+  frankensteinCase    FrankensteinCase @relation(fields: [caseId], references: [id], onDelete: Cascade)
+
+  @@index([caseId])
+  @@index([status])
+}
+

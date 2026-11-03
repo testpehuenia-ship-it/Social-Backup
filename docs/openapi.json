@@ -1,0 +1,171 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Social Backup by ADNQN API",
+    "version": "1.0.0",
+    "description": "Especificación de la API REST para el núcleo SaaS multicliente Social Backup by ADNQN.",
+    "contact": {
+      "name": "ADNQN Soporte",
+      "email": "soporte@adnqn.com"
+    }
+  },
+  "servers": [
+    {
+      "url": "http://localhost:3000/api",
+      "description": "Entorno Local de Desarrollo"
+    }
+  ],
+  "paths": {
+    "/capture/submit": {
+      "post": {
+        "summary": "Captura voluntaria de contacto desde formulario web o widget",
+        "description": "Registra o actualiza un contacto voluntario, registra el consentimiento explícito y emite un token de verificación de uso único.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["tenantSlug", "email", "consentRescue"],
+                "properties": {
+                  "tenantSlug": { "type": "string", "example": "adnqn-coffee" },
+                  "email": { "type": "string", "format": "email", "example": "contacto@ejemplo.com" },
+                  "name": { "type": "string", "example": "Valentina Morales" },
+                  "consentRescue": { "type": "boolean", "example": true },
+                  "consentNews": { "type": "boolean", "example": false },
+                  "source": { "type": "string", "enum": ["WEB_FORM", "WIDGET", "QR_CODE"] },
+                  "originUrl": { "type": "string", "format": "uri" }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": { "description": "Contacto registrado y correo de verificación enviado." },
+          "400": { "description": "Datos inválidos o falta de consentimiento obligatorio." },
+          "403": { "description": "Cuota Free alcanzada para el negocio." }
+        }
+      }
+    },
+    "/capture/verify": {
+      "post": {
+        "summary": "Verificación de canal de correo electrónico",
+        "description": "Valida un token de verificación de un solo uso y activa el canal del contacto.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["token"],
+                "properties": {
+                  "token": { "type": "string", "example": "a3f5b7c89..." }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": { "description": "Canal verificado exitosamente." },
+          "400": { "description": "Token inválido, expirado o ya consumido." }
+        }
+      }
+    },
+    "/capture/preferences": {
+      "post": {
+        "summary": "Actualización de preferencias y baja voluntaria (Opt-out)",
+        "description": "Permite revocar finalidades o solicitar la baja inmediata de todas las comunicaciones.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["tenantSlug", "email"],
+                "properties": {
+                  "tenantSlug": { "type": "string" },
+                  "email": { "type": "string", "format": "email" },
+                  "allowRescue": { "type": "boolean" },
+                  "allowNewsletter": { "type": "boolean" },
+                  "unsubscribeAll": { "type": "boolean" }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": { "description": "Preferencias actualizadas o baja procesada." },
+          "404": { "description": "Contacto o negocio no encontrado." }
+        }
+      }
+    },
+    "/contacts/export": {
+      "get": {
+        "summary": "Exportación segura de base de contactos en CSV",
+        "parameters": [
+          {
+            "name": "tenantSlug",
+            "in": "query",
+            "required": true,
+            "schema": { "type": "string" }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Archivo CSV descargable con protección anti-inyección de fórmulas.",
+            "content": { "text/csv": {} }
+          }
+        }
+      }
+    },
+    "/rescue/execute": {
+      "post": {
+        "summary": "Ejecución de campaña de Modo Rescate",
+        "description": "Filtra la audiencia elegible verificada, excluye bajas, valida idempotencia y despacha la comunicación.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["tenantSlug", "platform", "affectedHandle", "newOfficialUrl"],
+                "properties": {
+                  "tenantSlug": { "type": "string" },
+                  "platform": { "type": "string" },
+                  "affectedHandle": { "type": "string" },
+                  "newOfficialUrl": { "type": "string", "format": "uri" },
+                  "messageBody": { "type": "string" },
+                  "idempotencyKey": { "type": "string" },
+                  "isTestSend": { "type": "boolean" },
+                  "adminEmail": { "type": "string", "format": "email" }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": { "description": "Campaña procesada en cola o correo de prueba enviado." }
+        }
+      }
+    },
+    "/backup": {
+      "get": {
+        "summary": "Generación de respaldo completo (Snapshot) del tenant",
+        "parameters": [
+          {
+            "name": "tenantSlug",
+            "in": "query",
+            "required": true,
+            "schema": { "type": "string" }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Archivo JSON con datos del negocio y cabecera de checksum SHA-256.",
+            "content": { "application/json": {} }
+          }
+        }
+      }
+    }
+  }
+}
