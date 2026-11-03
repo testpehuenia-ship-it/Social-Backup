@@ -2,21 +2,21 @@
 
 import { useState, useEffect } from "react";
 import Link from "next/link";
-import {
-  Skull,
-  ShieldAlert,
-  Users,
-  Send,
-  CheckCircle2,
-  Clock,
-  AlertTriangle,
-  ExternalLink,
-  Play,
-  Pause,
-  RefreshCw,
-  Search,
-  Plus,
-  Sliders,
+import { 
+  Skull, 
+  ShieldAlert, 
+  Users, 
+  Send, 
+  CheckCircle2, 
+  Clock, 
+  AlertTriangle, 
+  ExternalLink, 
+  Play, 
+  Pause, 
+  RefreshCw, 
+  Search, 
+  Plus, 
+  Sliders, 
   DollarSign,
   TrendingUp,
   Mail,
@@ -25,7 +25,9 @@ import {
   Zap,
   Info,
   Building2,
-  Lock
+  Lock,
+  CreditCard,
+  Share2
 } from "lucide-react";
 
 interface FrankensteinTarget {
@@ -52,6 +54,11 @@ interface FrankensteinCase {
   tier: string;
   dailyRateLimit: number;
   priceCharged: number | null;
+  paymentStatus: string;
+  mercadoPagoPaymentUrl: string | null;
+  estimatedFollowers: number;
+  guaranteedReach: number;
+  estimatedSuccessRate: number;
   totalScraped: number;
   totalNotified: number;
   totalConverted: number;
@@ -67,7 +74,7 @@ export default function AdminFrankensteinPage() {
   const [message, setMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
   const [showCreateModal, setShowCreateModal] = useState(false);
 
-  // Formulario de creación directa SuperAdmin
+  // Formulario nuevo caso
   const [newCaseData, setNewCaseData] = useState({
     clientName: "",
     clientEmail: "",
@@ -131,6 +138,99 @@ export default function AdminFrankensteinPage() {
     }
   };
 
+  // Generar link de Mercado Pago
+  const handleGenerateMercadoPago = async () => {
+    if (!selectedCase) return;
+    setActionLoading(true);
+
+    try {
+      const res = await fetch("/api/payments/mercadopago", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          caseId: selectedCase.id,
+          planCode: selectedCase.tier,
+          amountUsd: selectedCase.priceCharged || 420,
+          clientEmail: selectedCase.clientEmail,
+          title: `Rescate Forense Social Backup - ${selectedCase.clientName}`,
+        }),
+      });
+
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        throw new Error(data.error || "Error al generar link de Mercado Pago");
+      }
+
+      setMessage({ type: "success", text: `Link de Mercado Pago generado: ${data.paymentUrl}` });
+      await fetchCases();
+    } catch (err: any) {
+      setMessage({ type: "error", text: err.message });
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  // Confirmar pago manualmente o por MP
+  const handleConfirmPayment = async () => {
+    if (!selectedCase) return;
+    setActionLoading(true);
+
+    try {
+      const res = await fetch("/api/payments/mercadopago", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "CONFIRM_PAYMENT",
+          caseId: selectedCase.id,
+        }),
+      });
+
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        throw new Error(data.error || "Error al confirmar pago");
+      }
+
+      setMessage({ type: "success", text: data.message });
+      await fetchCases();
+    } catch (err: any) {
+      setMessage({ type: "error", text: err.message });
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  // Redactar y abrir WhatsApp con la propuesta calculada
+  const handleOpenWhatsApp = () => {
+    if (!selectedCase) return;
+    const phone = (selectedCase.clientPhone || "").replace(/\D/g, "");
+    const estimatedFollowers = selectedCase.tier === "FRANKEN_VIP" ? "15.000+" : selectedCase.tier === "FRANKEN_PRO" ? "4.500 - 8.000" : "1.200 - 2.500";
+    const guaranteedReach = selectedCase.tier === "FRANKEN_VIP" ? "hasta 50.000 contactos" : selectedCase.tier === "FRANKEN_PRO" ? "hasta 10.000 contactos" : "hasta 2.500 contactos";
+    const successRate = selectedCase.tier === "FRANKEN_VIP" ? "50% a 70%" : "40% a 65%";
+    const mpLink = selectedCase.mercadoPagoPaymentUrl || `https://mpago.la/socialbackup-${selectedCase.id.slice(0, 8)}`;
+
+    const text = `¡Hola ${selectedCase.clientName}! Te escribimos del equipo forense de ADNQN / Social Backup respecto a tu solicitud de rescate.
+
+Hemos auditado preliminarmente tu cuenta previa:
+🔗 ${selectedCase.lostAccountUrl}
+📊 Audiencia estimada rastreable: ${estimatedFollowers} seguidores.
+🎯 Plan asignado: ${selectedCase.tier} ($${selectedCase.priceCharged || 420} USD).
+
+🛡️ ALCANCE Y GARANTÍAS DE SEGURIDAD:
+• Contactos asegurados a notificar: ${guaranteedReach}.
+• Ritmo de entrega: ${selectedCase.dailyRateLimit} avisos/día mediante cuentas satélite de ADNQN (tu cuenta nueva queda 100% blindada contra bloqueos).
+• Tasa estimada de reconexión efectiva: ${successRate} de tu comunidad activa.
+• Nueva cuenta oficial: ${selectedCase.newAccountUrl}
+
+💳 Enlace de pago seguro (Mercado Pago en cuotas / transferencia):
+${mpLink}
+
+Una vez acreditado, activamos de inmediato la extracción forense y el motor de goteo. ¡Quedamos a tu disposición para cualquier duda!`;
+
+    const encoded = encodeURIComponent(text);
+    const url = phone ? `https://wa.me/${phone}?text=${encoded}` : `https://wa.me/?text=${encoded}`;
+    window.open(url, "_blank");
+  };
+
   const handleCreateCase = async (e: React.FormEvent) => {
     e.preventDefault();
     setActionLoading(true);
@@ -173,12 +273,14 @@ export default function AdminFrankensteinPage() {
       <div className="bg-gradient-to-r from-red-950 via-slate-900 to-amber-950 border-b border-red-500/20 px-4 py-2 text-xs flex items-center justify-between">
         <div className="flex items-center gap-2 text-red-300 font-semibold">
           <Lock className="w-3.5 h-3.5 text-red-400" />
-          <span>ÁREA EXCLUSIVA DE ADMINISTRADORES ADNQN · MÓDULO FORENSE FRANKENSTEIN</span>
+          <span>SUPERADMIN ADNQN · CONSOLA FORENSE FRANKENSTEIN & COBROS</span>
         </div>
         <div className="flex items-center gap-3 text-slate-400">
-          <Link href="/dashboard" className="hover:text-white transition-colors">Volver al Dashboard General</Link>
+          <Link href="/admin/plans" className="text-emerald-400 hover:text-emerald-300 font-semibold flex items-center gap-1">
+            <Sliders className="w-3 h-3" /> Gestor de Planes y Tarifas
+          </Link>
           <span>|</span>
-          <span className="text-amber-400 font-medium">SuperAdmin: soporte@adnqn.com</span>
+          <Link href="/dashboard" className="hover:text-white transition-colors">Dashboard General</Link>
         </div>
       </div>
 
@@ -199,12 +301,19 @@ export default function AdminFrankensteinPage() {
                 </span>
               </div>
               <p className="text-xs text-slate-400">
-                Rescate asistido de comunidades perdidas · Scraping forense & Goteo anti-baneo
+                Rescate asistido de comunidades perdidas · Scraping forense, cotización y cobros MP
               </p>
             </div>
           </div>
 
           <div className="flex items-center gap-3">
+            <Link
+              href="/admin/plans"
+              className="px-3.5 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 font-semibold text-xs border border-slate-700 transition-all flex items-center gap-1.5"
+            >
+              <Sliders className="w-4 h-4 text-emerald-400" />
+              <span>Modificar Tarifas</span>
+            </Link>
             <button
               onClick={() => setShowCreateModal(true)}
               className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-slate-950 font-bold text-xs shadow-md shadow-amber-500/20 transition-all"
@@ -216,7 +325,6 @@ export default function AdminFrankensteinPage() {
               onClick={fetchCases}
               disabled={loading}
               className="p-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 transition-colors"
-              title="Refrescar casos"
             >
               <RefreshCw className={`w-4 h-4 ${loading ? "animate-spin" : ""}`} />
             </button>
@@ -227,10 +335,11 @@ export default function AdminFrankensteinPage() {
       {/* Alerta de notificación */}
       {message && (
         <div className="max-w-7xl mx-auto w-full px-4 sm:px-6 lg:px-8 mt-4">
-          <div className={`p-4 rounded-xl border text-xs sm:text-sm flex items-center justify-between ${message.type === "success"
+          <div className={`p-4 rounded-xl border text-xs sm:text-sm flex items-center justify-between ${
+            message.type === "success" 
               ? "bg-emerald-500/10 border-emerald-500/30 text-emerald-300"
               : "bg-rose-500/10 border-rose-500/30 text-rose-300"
-            }`}>
+          }`}>
             <div className="flex items-center gap-2">
               {message.type === "success" ? <CheckCircle2 className="w-5 h-5 shrink-0" /> : <AlertTriangle className="w-5 h-5 shrink-0" />}
               <span>{message.text}</span>
@@ -250,7 +359,7 @@ export default function AdminFrankensteinPage() {
               <DollarSign className="w-4 h-4 text-emerald-400" />
             </div>
             <div className="text-2xl font-black text-white">${totalRevenue.toLocaleString()} USD</div>
-            <div className="text-[11px] text-slate-500 mt-1">{cases.length} casos contratados</div>
+            <div className="text-[11px] text-slate-500 mt-1">{cases.length} casos gestionados</div>
           </div>
 
           <div className="glass-panel p-5 rounded-2xl border border-slate-800/80 bg-slate-900/40">
@@ -259,7 +368,7 @@ export default function AdminFrankensteinPage() {
               <Users className="w-4 h-4 text-amber-400" />
             </div>
             <div className="text-2xl font-black text-amber-400">{totalScrapedAll.toLocaleString()}</div>
-            <div className="text-[11px] text-slate-500 mt-1">Seguidores identificados</div>
+            <div className="text-[11px] text-slate-500 mt-1">Seguidores en base forense</div>
           </div>
 
           <div className="glass-panel p-5 rounded-2xl border border-slate-800/80 bg-slate-900/40">
@@ -289,44 +398,54 @@ export default function AdminFrankensteinPage() {
           <div className="lg:col-span-1 glass-panel rounded-2xl border border-slate-800 p-5 bg-slate-900/50 flex flex-col space-y-4">
             <div className="flex items-center justify-between pb-3 border-b border-slate-800">
               <h3 className="font-bold text-white text-sm flex items-center gap-2">
-                <Skull className="w-4 h-4 text-amber-400" /> Casos Frankenstein ({cases.length})
+                <Skull className="w-4 h-4 text-amber-400" /> Solicitudes & Casos ({cases.length})
               </h3>
-              <span className="text-[10px] text-slate-400 font-mono">Solo Admin</span>
+              <span className="text-[10px] text-slate-400 font-mono">ADNQN SuperAdmin</span>
             </div>
 
             {cases.length === 0 ? (
               <div className="text-center py-12 text-xs text-slate-500">
-                No hay casos registrados aún.<br />Crea uno nuevo o espera solicitudes de clientes.
+                No hay casos registrados aún.
               </div>
             ) : (
               <div className="space-y-2 overflow-y-auto max-h-[600px] pr-1">
                 {cases.map((c) => {
                   const isSelected = selectedCase?.id === c.id;
+                  const isPaid = c.paymentStatus === "APPROVED";
                   return (
                     <div
                       key={c.id}
                       onClick={() => setSelectedCaseId(c.id)}
-                      className={`p-3.5 rounded-xl border text-xs cursor-pointer transition-all ${isSelected
+                      className={`p-3.5 rounded-xl border text-xs cursor-pointer transition-all ${
+                        isSelected
                           ? "bg-slate-800 border-amber-500/50 shadow-md shadow-amber-500/5"
                           : "bg-slate-950/60 border-slate-800 hover:border-slate-700 hover:bg-slate-800/40"
-                        }`}
+                      }`}
                     >
                       <div className="flex items-center justify-between mb-1.5">
-                        <span className="font-bold text-white truncate max-w-[150px]">{c.clientName}</span>
-                        <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${c.status === "COMPLETED" ? "bg-emerald-500/20 text-emerald-300" :
-                            c.status === "IN_PROGRESS" ? "bg-cyan-500/20 text-cyan-300 animate-pulse" :
-                              c.status === "READY_FOR_DRIP" ? "bg-amber-500/20 text-amber-300" :
-                                "bg-slate-700 text-slate-300"
+                        <span className="font-bold text-white truncate max-w-[140px]">{c.clientName}</span>
+                        <div className="flex items-center gap-1">
+                          <span className={`text-[9px] font-bold px-1.5 py-0.2 rounded ${
+                            isPaid ? "bg-emerald-500/20 text-emerald-300 border border-emerald-500/30" : "bg-amber-500/20 text-amber-300 border border-amber-500/30"
                           }`}>
-                          {c.status}
-                        </span>
+                            {isPaid ? "PAGADO" : "PEND. PAGO"}
+                          </span>
+                          <span className={`text-[10px] font-bold px-1.5 py-0.2 rounded-full ${
+                            c.status === "COMPLETED" ? "bg-emerald-500/20 text-emerald-300" :
+                            c.status === "IN_PROGRESS" ? "bg-cyan-500/20 text-cyan-300 animate-pulse" :
+                            c.status === "READY_FOR_DRIP" ? "bg-amber-500/20 text-amber-300" :
+                            "bg-slate-700 text-slate-300"
+                          }`}>
+                            {c.status}
+                          </span>
+                        </div>
                       </div>
                       <div className="text-slate-400 truncate text-[11px] mb-2 font-mono">
                         Perdida: {c.lostAccountUrl}
                       </div>
                       <div className="flex items-center justify-between text-[10px] text-slate-400 pt-1.5 border-t border-slate-800/80">
-                        <span className="font-semibold text-amber-300/90">{c.tier}</span>
-                        <span>{c.totalConverted} / {c.totalScraped} recuperados</span>
+                        <span className="font-semibold text-amber-300/90">{c.tier} (${c.priceCharged})</span>
+                        <span>{c.totalConverted} / {c.totalScraped} reconectados</span>
                       </div>
                     </div>
                   );
@@ -339,7 +458,7 @@ export default function AdminFrankensteinPage() {
           <div className="lg:col-span-2 glass-panel rounded-2xl border border-slate-800 p-6 bg-slate-900/50 space-y-6">
             {!selectedCase ? (
               <div className="text-center py-20 text-slate-500 text-sm">
-                Selecciona un caso para operar el scraper y el motor de goteo.
+                Selecciona un caso para operar el scraper, cotizar y despachar.
               </div>
             ) : (
               <>
@@ -351,13 +470,20 @@ export default function AdminFrankensteinPage() {
                       <span className="text-[11px] font-bold bg-amber-500/20 text-amber-300 border border-amber-500/30 px-2 py-0.5 rounded">
                         {selectedCase.tier} · ${selectedCase.priceCharged || 420} USD
                       </span>
+                      <span className={`text-[11px] font-bold px-2 py-0.5 rounded ${
+                        selectedCase.paymentStatus === "APPROVED"
+                          ? "bg-emerald-500/20 text-emerald-300 border border-emerald-500/30"
+                          : "bg-amber-500/20 text-amber-300 border border-amber-500/30"
+                      }`}>
+                        {selectedCase.paymentStatus === "APPROVED" ? "✓ Cobro Acreditado" : "Pendiente de Cobro"}
+                      </span>
                     </div>
                     <div className="text-xs text-slate-400 flex flex-wrap items-center gap-3">
-                      <span>Contacto: <strong className="text-slate-200">{selectedCase.clientEmail}</strong></span>
+                      <span>Email: <strong className="text-slate-200">{selectedCase.clientEmail}</strong></span>
                       {selectedCase.clientPhone && (
                         <span>WhatsApp: <strong className="text-emerald-400">{selectedCase.clientPhone}</strong></span>
                       )}
-                      <span>Plataforma: <strong className="text-slate-200">{selectedCase.lostPlatform}</strong></span>
+                      <span>Red: <strong className="text-slate-200">{selectedCase.lostPlatform}</strong></span>
                     </div>
                   </div>
 
@@ -366,6 +492,69 @@ export default function AdminFrankensteinPage() {
                       Goteo: {selectedCase.dailyRateLimit}/día
                     </span>
                   </div>
+                </div>
+
+                {/* Módulo de Respuesta al Cliente & Mercado Pago */}
+                <div className="p-4 rounded-2xl bg-gradient-to-r from-amber-950/30 via-slate-900 to-emerald-950/20 border border-amber-500/20 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <h4 className="text-xs font-bold text-white uppercase tracking-wider flex items-center gap-1.5">
+                        <MessageSquare className="w-3.5 h-3.5 text-amber-400" /> Respuesta Comercial & Coordinación de Pago
+                      </h4>
+                      <p className="text-[11px] text-slate-400">
+                        Informa al cliente la audiencia asegurable, porcentaje de éxito y link de cobro MP
+                      </p>
+                    </div>
+
+                    {selectedCase.paymentStatus !== "APPROVED" && (
+                      <button
+                        onClick={handleConfirmPayment}
+                        disabled={actionLoading}
+                        className="px-2.5 py-1 rounded-lg bg-emerald-600/30 hover:bg-emerald-600/50 text-emerald-300 text-[11px] font-bold border border-emerald-500/40 transition-colors"
+                        title="Marcar pago como recibido (transferencia/efectivo/MP)"
+                      >
+                        ✓ Marcar Pagado Manualmente
+                      </button>
+                    )}
+                  </div>
+
+                  {/* Botonera de Acción de Contacto */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
+                    {/* Botón WhatsApp */}
+                    <button
+                      onClick={handleOpenWhatsApp}
+                      className="p-3 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs flex items-center justify-center gap-2 transition-all shadow-md shadow-emerald-600/20"
+                    >
+                      <MessageSquare className="w-4 h-4" />
+                      <span>Enviar Propuesta por WhatsApp</span>
+                    </button>
+
+                    {/* Botón Mercado Pago */}
+                    <button
+                      onClick={handleGenerateMercadoPago}
+                      disabled={actionLoading}
+                      className="p-3 rounded-xl bg-cyan-600 hover:bg-cyan-500 text-white font-bold text-xs flex items-center justify-center gap-2 transition-all shadow-md shadow-cyan-600/20"
+                    >
+                      <CreditCard className="w-4 h-4" />
+                      <span>{selectedCase.mercadoPagoPaymentUrl ? "Regenerar Link Mercado Pago" : "Generar Link Mercado Pago"}</span>
+                    </button>
+                  </div>
+
+                  {selectedCase.mercadoPagoPaymentUrl && (
+                    <div className="p-2.5 rounded-lg bg-slate-950/60 border border-slate-800 text-[11px] flex items-center justify-between">
+                      <span className="text-slate-400 truncate max-w-md font-mono">
+                        Link MP: {selectedCase.mercadoPagoPaymentUrl}
+                      </span>
+                      <a
+                        href={selectedCase.mercadoPagoPaymentUrl}
+                        target="_blank"
+                        className="text-cyan-400 hover:underline font-semibold shrink-0 ml-2 flex items-center gap-1"
+                      >
+                        <span>Abrir Checkout</span>
+                        <ExternalLink className="w-3 h-3" />
+                      </a>
+                    </div>
+                  )}
                 </div>
 
                 {/* Rutas de Cuentas */}
@@ -457,13 +646,13 @@ export default function AdminFrankensteinPage() {
                     </span>
                   </div>
                   <div className="w-full h-2.5 rounded-full bg-slate-800 overflow-hidden flex">
-                    <div
-                      className="bg-emerald-500 transition-all duration-500"
+                    <div 
+                      className="bg-emerald-500 transition-all duration-500" 
                       style={{ width: `${selectedCase.totalScraped > 0 ? (selectedCase.totalConverted / selectedCase.totalScraped) * 100 : 0}%` }}
                       title="Reconectados"
                     />
-                    <div
-                      className="bg-cyan-500 transition-all duration-500"
+                    <div 
+                      className="bg-cyan-500 transition-all duration-500" 
                       style={{ width: `${selectedCase.totalScraped > 0 ? ((selectedCase.totalNotified - selectedCase.totalConverted) / selectedCase.totalScraped) * 100 : 0}%` }}
                       title="En espera"
                     />
@@ -507,18 +696,20 @@ export default function AdminFrankensteinPage() {
                                 )}
                               </td>
                               <td className="p-3">
-                                <span className={`text-[10px] px-2 py-0.5 rounded font-semibold ${t.notificationChannel === "DIRECT_EMAIL"
+                                <span className={`text-[10px] px-2 py-0.5 rounded font-semibold ${
+                                  t.notificationChannel === "DIRECT_EMAIL"
                                     ? "bg-cyan-500/20 text-cyan-300 border border-cyan-500/30"
                                     : "bg-amber-500/20 text-amber-300 border border-amber-500/30"
-                                  }`}>
+                                }`}>
                                   {t.notificationChannel === "DIRECT_EMAIL" ? "Email Directo (0% riesgo)" : "Satélite ADNQN"}
                                 </span>
                               </td>
                               <td className="p-3">
-                                <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${t.status === "CONVERTED" ? "bg-emerald-500/20 text-emerald-300" :
-                                    t.status === "SENT" ? "bg-cyan-500/20 text-cyan-300" :
-                                      "bg-slate-800 text-slate-400"
-                                  }`}>
+                                <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
+                                  t.status === "CONVERTED" ? "bg-emerald-500/20 text-emerald-300" :
+                                  t.status === "SENT" ? "bg-cyan-500/20 text-cyan-300" :
+                                  "bg-slate-800 text-slate-400"
+                                }`}>
                                   {t.status}
                                 </span>
                               </td>
@@ -631,11 +822,11 @@ export default function AdminFrankensteinPage() {
                     onChange={(e) => {
                       const tier = e.target.value;
                       const prices: Record<string, number> = { FRANKEN_LOCAL: 180, FRANKEN_PRO: 420, FRANKEN_VIP: 850 };
-                      setNewCaseData({
-                        ...newCaseData,
-                        tier,
+                      setNewCaseData({ 
+                        ...newCaseData, 
+                        tier, 
                         priceCharged: prices[tier] || 420,
-                        dailyRateLimit: tier === "FRANKEN_VIP" ? 100 : 50
+                        dailyRateLimit: tier === "FRANKEN_VIP" ? 100 : 50 
                       });
                     }}
                     className="w-full px-2 py-1.5 rounded-lg bg-slate-800 border border-slate-700 text-white"
@@ -690,4 +881,3 @@ export default function AdminFrankensteinPage() {
     </div>
   );
 }
-

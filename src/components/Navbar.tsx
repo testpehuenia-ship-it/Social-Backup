@@ -10,7 +10,8 @@ import {
   Database, 
   Building2, 
   ExternalLink,
-  Skull
+  Skull,
+  Sliders
 } from "lucide-react";
 
 export function Navbar({ tenantSlug = "adnqn-coffee", tenantName = "ADNQN Coffee Roasters" }: { tenantSlug?: string; tenantName?: string }) {
@@ -83,6 +84,16 @@ export function Navbar({ tenantSlug = "adnqn-coffee", tenantName = "ADNQN Coffee
             >
               <span>Ver Página Pública</span>
               <ExternalLink className="w-3.5 h-3.5" />
+            </Link>
+
+            {/* Planes y Tarifas Admin Link */}
+            <Link
+              href="/admin/plans"
+              className="hidden lg:flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 transition-all"
+              title="Gestor central de planes y precios"
+            >
+              <Sliders className="w-3.5 h-3.5 text-emerald-400" />
+              <span>Planes & Tarifas</span>
             </Link>
 
             {/* Frankenstein VIP Admin Link */}

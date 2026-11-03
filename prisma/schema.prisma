@@ -361,6 +361,14 @@ model FrankensteinCase {
   notes           String?
   priceCharged    Float?   @default(420.0)
   
+  // Integración de Pago y Estimación Comercial
+  paymentStatus           String   @default("PENDING") // PENDING, APPROVED, REJECTED
+  mercadoPagoPreferenceId String?
+  mercadoPagoPaymentUrl   String?
+  estimatedFollowers      Int      @default(0)
+  guaranteedReach         Int      @default(0)
+  estimatedSuccessRate    Float    @default(50.0)
+
   // Métricas acumuladas
   totalScraped    Int      @default(0)
   totalNotified   Int      @default(0)
@@ -395,4 +403,27 @@ model FrankensteinTarget {
   @@index([caseId])
   @@index([status])
 }
+
+// ==========================================
+// 9. GESTOR DE PLANES Y TARIFAS (SUPERADMIN)
+// ==========================================
+model PlatformPlan {
+  id              String   @id @default(uuid())
+  code            String   @unique // FREE, ADNQN_WEB, PRO, ENTERPRISE, FRANKEN_LOCAL, FRANKEN_PRO, FRANKEN_VIP
+  name            String
+  category        String   @default("SUBSCRIPTION") // SUBSCRIPTION, RESCUE_FRANKENSTEIN
+  description     String
+  priceUsd        Float
+  priceArs        Float?
+  billingCycle    String   @default("MONTHLY") // MONTHLY, ONE_TIME, ANNUAL
+  maxContacts     Int      @default(100)
+  featuresJson    String   // JSON con lista de características
+  isActive        Boolean  @default(true)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([category])
+  @@index([code])
+}
+
 

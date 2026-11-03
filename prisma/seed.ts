@@ -13,6 +13,7 @@ async function main() {
   console.log("Iniciando seed de Social Backup by ADNQN...");
 
   // 1. Limpieza controlada
+  await prisma.platformPlan.deleteMany({});
   await prisma.frankensteinTarget.deleteMany({});
   await prisma.frankensteinCase.deleteMany({});
   await prisma.rescueMessage.deleteMany({});
@@ -306,6 +307,91 @@ async function main() {
         convertedAt: st.status === "CONVERTED" ? new Date() : null,
       },
     });
+  }
+
+  // 8. Crear Planes de la Plataforma
+  const plans = [
+    {
+      code: "FREE",
+      name: "Plan Free Independiente",
+      category: "SUBSCRIPTION",
+      description: "Para pequeños negocios que desean probar la soberanía de sus contactos.",
+      priceUsd: 0,
+      priceArs: 0,
+      billingCycle: "MONTHLY",
+      maxContacts: 100,
+      featuresJson: JSON.stringify(["Hasta 100 contactos", "1 Formulario de captura", "Modo rescate básico por email", "Exportación CSV segura"]),
+    },
+    {
+      code: "ADNQN_WEB",
+      name: "Social Backup + Web ADNQN",
+      category: "SUBSCRIPTION",
+      description: "Exclusivo para clientes con sitios web desarrollados por ADNQN. Comienzan de cero con acompañamiento y widgets exclusivos.",
+      priceUsd: 35,
+      priceArs: 42000,
+      billingCycle: "MONTHLY",
+      maxContacts: 1500,
+      featuresJson: JSON.stringify(["Integración completa en tu Web ADNQN", "Estrategia para empezar redes desde cero", "Hasta 1.500 contactos verificados", "Widget embebible de alta conversión", "Soporte prioritario ADNQN"]),
+    },
+    {
+      code: "PRO",
+      name: "Social Backup Profesional",
+      category: "SUBSCRIPTION",
+      description: "Para marcas y empresas con comunidades medianas en crecimiento constante.",
+      priceUsd: 49,
+      priceArs: 58800,
+      billingCycle: "MONTHLY",
+      maxContacts: 5000,
+      featuresJson: JSON.stringify(["Hasta 5.000 contactos", "Múltiples formularios y campañas UTM", "Modo Rescate prioritario", "Atribución avanzada y códigos QR ilimitados"]),
+    },
+    {
+      code: "ENTERPRISE",
+      name: "Social Backup Empresa",
+      category: "SUBSCRIPTION",
+      description: "Para corporaciones, agencias y marcas masivas sin límites de escala.",
+      priceUsd: 120,
+      priceArs: 144000,
+      billingCycle: "MONTHLY",
+      maxContacts: 25000,
+      featuresJson: JSON.stringify(["Hasta 25.000 contactos", "SLA de rescate inmediato", "Integraciones multi-red", "Gestor de cuenta asignado ADNQN"]),
+    },
+    {
+      code: "FRANKEN_LOCAL",
+      name: "Rescate Franken-Local",
+      category: "RESCUE_FRANKENSTEIN",
+      description: "Para comercios locales que sufrieron baneo en 1 red social.",
+      priceUsd: 180,
+      priceArs: 216000,
+      billingCycle: "ONE_TIME",
+      maxContacts: 2500,
+      featuresJson: JSON.stringify(["Extracción forense de hasta 2.500 seguidores", "Despacho seguro de 50 mensajes/día", "3 meses de Social Backup Free incluidos", "Blindaje anti-bloqueo"]),
+    },
+    {
+      code: "FRANKEN_PRO",
+      name: "Rescate Franken-Pro",
+      category: "RESCUE_FRANKENSTEIN",
+      description: "Para marcas y creadores con audiencia consolidada.",
+      priceUsd: 420,
+      priceArs: 504000,
+      billingCycle: "ONE_TIME",
+      maxContacts: 10000,
+      featuresJson: JSON.stringify(["Extracción forense de hasta 10.000 seguidores", "Despacho dosificado de 100 mensajes/día", "Uso de cuentas satélite ADNQN", "3 meses de Social Backup Pro incluidos"]),
+    },
+    {
+      code: "FRANKEN_VIP",
+      name: "Rescate Franken-VIP (Influencers)",
+      category: "RESCUE_FRANKENSTEIN",
+      description: "Para influencers y figuras públicas con comunidades masivas.",
+      priceUsd: 850,
+      priceArs: 1020000,
+      billingCycle: "ONE_TIME",
+      maxContacts: 50000,
+      featuresJson: JSON.stringify(["Extracción forense profunda (+10k a 50k+ seguidores)", "Cluster multi-satélite de alta velocidad", "Detección de emails públicos en bios y posts", "Acompañamiento personal de relanzamiento"]),
+    },
+  ];
+
+  for (const p of plans) {
+    await prisma.platformPlan.create({ data: p });
   }
 
   console.log("Seed completado exitosamente:");
